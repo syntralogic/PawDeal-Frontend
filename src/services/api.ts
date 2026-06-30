@@ -1,4 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const IMAGE_BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:5000';
 
 interface AuthResponse {
   token: string;
@@ -9,6 +10,50 @@ interface AuthResponse {
     avatar?: string;
     role: 'buyer' | 'seller' | 'both' | 'admin';
   };
+}
+
+// ✅ ADD THIS FUNCTION - It fixes all image URLs automatically
+function fixImageUrls(data: any): any {
+    if (!data) return data;
+    if (Array.isArray(data)) return data.map(item => fixImageUrls(item));
+    if (typeof data !== 'object') return data;
+    
+    const result = { ...data };
+    
+    // Fix primary_image
+    if (result.primary_image && typeof result.primary_image === 'string' && result.primary_image.startsWith('/uploads')) {
+        result.primary_image = `${IMAGE_BASE_URL}${result.primary_image}`;
+    }
+    
+    // Fix image_url in images array
+    if (result.images && Array.isArray(result.images)) {
+        result.images = result.images.map((img: any) => ({
+            ...img,
+            image_url: img.image_url?.startsWith('/uploads') ? `${IMAGE_BASE_URL}${img.image_url}` : img.image_url
+        }));
+    }
+    
+    // Fix image_url in product_images (if your API uses this)
+    if (result.product_images && Array.isArray(result.product_images)) {
+        result.product_images = result.product_images.map((img: any) => ({
+            ...img,
+            image_url: img.image_url?.startsWith('/uploads') ? `${IMAGE_BASE_URL}${img.image_url}` : img.image_url
+        }));
+    }
+    
+    // Fix avatar
+    if (result.avatar && typeof result.avatar === 'string' && result.avatar.startsWith('/uploads')) {
+        result.avatar = `${IMAGE_BASE_URL}${result.avatar}`;
+    }
+    
+    // Recursively fix nested objects
+    for (const key of Object.keys(result)) {
+        if (typeof result[key] === 'object' && result[key] !== null) {
+            result[key] = fixImageUrls(result[key]);
+        }
+    }
+    
+    return result;
 }
 
 // Helper function for API calls
@@ -28,6 +73,15 @@ async function apiCall<T>(
 
   if (!response.ok) {
     throw new Error(data.message || data.error || 'Something went wrong');
+  }
+
+  // ✅ ADD THIS - Fix all image URLs in the response
+  if (data.data) {
+    data.data = fixImageUrls(data.data);
+  }
+  // Also fix if data is directly an array (like /pets returns array)
+  if (Array.isArray(data)) {
+    return fixImageUrls(data) as T;
   }
 
   return data;
